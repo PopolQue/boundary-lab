@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from blab.observation_planes import observation_planes_from_payload
@@ -315,6 +315,10 @@ def _normalize_symmetry(value: Any) -> str:
     return symmetry if symmetry in {"off", "x", "xy"} else "off"
 
 
+def _is_absolute_path(text: str) -> bool:
+    return PurePosixPath(text).is_absolute() or PureWindowsPath(text).is_absolute()
+
+
 def _resolve_path_fields(payload: dict[str, Any], base_dir: Path, fields: tuple[str, ...]) -> None:
     for field in fields:
         value = payload.get(field)
@@ -323,10 +327,9 @@ def _resolve_path_fields(payload: dict[str, Any], base_dir: Path, fields: tuple[
         text = str(value).strip()
         if not text:
             continue
-        path = Path(text)
-        if path.is_absolute():
+        if _is_absolute_path(text):
             continue
-        payload[field] = str((base_dir / path).resolve())
+        payload[field] = str((base_dir / Path(text)).resolve())
 
 
 def _relativize_path_fields(payload: dict[str, Any], base_dir: Path, fields: tuple[str, ...]) -> None:
@@ -336,6 +339,8 @@ def _relativize_path_fields(payload: dict[str, Any], base_dir: Path, fields: tup
             continue
         text = str(value).strip()
         if not text:
+            continue
+        if not _is_absolute_path(text):
             continue
         path = Path(text)
         if not path.is_absolute():

@@ -73,6 +73,9 @@ def fake_git_checkout(tmp_path: Path):
     git(remote, "init", "-b", "main")
     git(remote, "config", "user.name", "Test User")
     git(remote, "config", "user.email", "test@example.com")
+    (remote / "pyproject.toml").write_text("[project]\nname='test'\n")
+    (remote / "src" / "blab").mkdir(parents=True)
+    (remote / "src" / "blab" / "__init__.py").write_text("")
     (remote / "version.txt").write_text("v1.0.0")
     git(remote, "add", ".")
     git(remote, "commit", "-m", "v1.0.0 commit")
@@ -188,5 +191,121 @@ def test_desktop_runtime_macos_error_logging(tmp_path: Path, monkeypatch):
     assert "Simulated startup explosion" in log_content
     assert len(osascript_called) == 1
     assert "Boundary Lab could not start" in osascript_called[0][-1]
+
+
+def test_startup_log_path_on_macos(monkeypatch, tmp_path):
+    from blab.gui import _startup_log_path
+
+    fake_home = tmp_path / "fake_home"
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    monkeypatch.setattr(sys, "platform", "darwin")
+
+    log_path = _startup_log_path()
+    assert log_path.parent == fake_home / "Library/Logs/Boundary Lab"
+    assert log_path.name.startswith("startup-")
+    assert log_path.suffix == ".log"
+
+
+def test_check_metal_runs_and_displays_dialog(tmp_path: Path, monkeypatch):
+    from blab import desktop_runtime
+
+    fake_home = tmp_path / "fake_home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    monkeypatch.setattr(sys, "platform", "darwin")
+
+    osascript_calls = []
+
+    def fake_run(cmd, **kwargs):
+        if cmd[0] == "osascript":
+            osascript_calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0)
+        # Pretend julia succeeded
+        return subprocess.CompletedProcess(cmd, 0, stdout="Apple Metal 3.0", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    dummy_root = tmp_path / "dummy_root"
+    dummy_root.mkdir()
+    success = desktop_runtime.check_metal(dummy_root)
+    assert success is True
+
+    metal_log = fake_home / "Library/Logs/Boundary Lab/metal-check.log"
+    assert metal_log.is_file()
+    assert "Apple Metal 3.0" in metal_log.read_text()
+    assert len(osascript_calls) == 1
+    assert "Apple Metal is ready" in osascript_calls[0][-1]
+
+
+def test_git_update_flow_checks_dirty_and_dev_branches(fake_git_checkout: tuple[Path, str, str], tmp_path: Path):
+    local, _v1_hash, remote = fake_git_checkout
+
+    # Test dev branch protection
+    git(local, "checkout", "-b", "feature-branch")
+    installer = REPO_ROOT / "01_install_update_boundary-lab.sh"
+    dummy_installer = local / installer.name
+    import shutil
+
+    shutil.copy(installer, dummy_installer)
+    dummy_installer.chmod(0o755)
+
+    test_env = dict(
+        os.environ,
+        BLAB_INTERNAL_RUN="1",
+        BLAB_ORIGINAL_DIR=str(local),
+        BLAB_REPO_URL=str(remote),
+        BLAB_SKIP_PYTHON_SETUP="1",
+    )
+
+    # Answer 'y' to prompt
+    result = subprocess.run(
+        [str(dummy_installer)],
+        input="y\n",
+        cwd=local,
+        capture_output=True,
+        text=True,
+        env=test_env,
+    )
+    assert "Development branches must be managed manually" in result.stdout
+
+    # Test dirty checkout protection
+    git(local, "checkout", "main")
+    (local / "version.txt").write_text("dirty edit")
+    result = subprocess.run(
+        [str(dummy_installer)],
+        input="y\n",
+        cwd=local,
+        capture_output=True,
+        text=True,
+        env=test_env,
+    )
+    assert "Tracked files contain local changes" in result.stdout
+
+    # Test clean checkout update to stable release tag
+    git(local, "checkout", "--", "version.txt")
+    result = subprocess.run(
+        [str(dummy_installer)],
+        input="y\n",
+        cwd=local,
+        capture_output=True,
+        text=True,
+        env=test_env,
+    )
+    assert "Checking out stable release v1.0.0" in result.stdout
+    assert git(local, "describe", "--tags", "HEAD") == "v1.0.0"
+
+
+def test_cross_platform_path_resolution():
+    from blab.project.io import _is_absolute_path, _resolve_path_fields
+
+    assert _is_absolute_path("C:/meshes/enclosure.msh") is True
+    assert _is_absolute_path("D:\\meshes\\enclosure.msh") is True
+    assert _is_absolute_path("/Users/user/mesh.msh") is True
+    assert _is_absolute_path("meshes/enclosure.msh") is False
+
+    payload = {"source_file": "C:/meshes/enclosure.msh"}
+    _resolve_path_fields(payload, Path("/some/base/dir"), ("source_file",))
+    assert payload["source_file"] == "C:/meshes/enclosure.msh"
+
 
 

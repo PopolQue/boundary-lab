@@ -10,13 +10,22 @@ if [ "${BLAB_INTERNAL_RUN:-}" != "1" ]; then
     TEMP_SCRIPT="$(mktemp "${TMPDIR:-/tmp}/blab_install_update.XXXXXX.sh")"
     cp "$0" "$TEMP_SCRIPT"
     chmod +x "$TEMP_SCRIPT"
-    BLAB_INTERNAL_RUN=1 BLAB_ORIGINAL_DIR="$ORIGINAL_DIR" exec "$TEMP_SCRIPT" "$@"
+    BLAB_INTERNAL_RUN=1 BLAB_ORIGINAL_DIR="$ORIGINAL_DIR" BLAB_TEMP_SCRIPT="$TEMP_SCRIPT" exec "$TEMP_SCRIPT" "$@"
 fi
-trap 'rm -f "$0"' EXIT
+if [ -n "${BLAB_TEMP_SCRIPT:-}" ]; then
+    trap 'rm -f "$BLAB_TEMP_SCRIPT"' EXIT
+fi
+
+for extra_path in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/.juliaup/bin"; do
+    if [ -d "$extra_path" ] && [[ ":$PATH:" != *":$extra_path:"* ]]; then
+        PATH="$extra_path:$PATH"
+    fi
+done
+export PATH
 
 ORIGINAL_DIR="${BLAB_ORIGINAL_DIR:-$(cd "$(dirname "$0")" && pwd -P)}"
 PROJECT_DIR=""
-REPO_URL="https://github.com/JWSound/boundary-lab.git"
+REPO_URL="${BLAB_REPO_URL:-https://github.com/JWSound/boundary-lab.git}"
 OPTIONAL_SOLVER_WARNING=0
 
 # Locate project directory
@@ -44,9 +53,22 @@ ask_yn() {
 }
 
 resolve_latest_release() {
-    curl -fsSL -H "User-Agent: Boundary-Lab-Updater" https://api.github.com/repos/JWSound/boundary-lab/releases/latest 2>/dev/null \
-        | grep '"tag_name":' \
-        | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/'
+    local tag=""
+    if [[ "$REPO_URL" =~ ^https://github\.com/ ]]; then
+        tag=$(curl -fsSL --connect-timeout 2 -H "User-Agent: Boundary-Lab-Updater" https://api.github.com/repos/JWSound/boundary-lab/releases/latest 2>/dev/null \
+            | grep '"tag_name":' \
+            | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+        if [ -n "$tag" ]; then
+            echo "$tag"
+            return 0
+        fi
+    fi
+    # Fallback to git ls-remote if GitHub REST API is rate-limited, unreachable, or a local mirror/test repo
+    tag=$(git ls-remote --tags --refs "$REPO_URL" 2>/dev/null | awk -F'/' '{print $NF}' | grep -E '^v[0-9]+' | sort -V | tail -n 1)
+    if [ -n "$tag" ]; then
+        echo "$tag"
+        return 0
+    fi
 }
 
 echo "============================================================"
@@ -98,10 +120,14 @@ if [ -d ".git" ]; then
             elif ! git diff --quiet || ! git diff --cached --quiet; then
                 echo "ERROR: Tracked files contain local changes. The update was not attempted."
             else
-                git fetch "$REPO_URL" "refs/heads/main:refs/remotes/blab-release/main" "refs/tags/$LATEST_RELEASE:refs/tags/$LATEST_RELEASE"
-                if git merge-base --is-ancestor HEAD refs/remotes/blab-release/main; then
+                if ! git fetch "$REPO_URL" "refs/heads/main:refs/remotes/blab-release/main" "refs/tags/$LATEST_RELEASE:refs/tags/$LATEST_RELEASE"; then
+                    echo "ERROR: Failed to fetch updates from $REPO_URL."
+                    echo "Update skipped; continuing with current checkout."
+                elif git merge-base --is-ancestor HEAD refs/remotes/blab-release/main; then
                     echo "Checking out stable release $LATEST_RELEASE..."
-                    git checkout --detach "refs/tags/$LATEST_RELEASE"
+                    if ! git checkout --detach "refs/tags/$LATEST_RELEASE"; then
+                        echo "ERROR: Could not checkout release tag $LATEST_RELEASE."
+                    fi
                 else
                     echo "ERROR: This checkout contains unpublished commits. Update skipped."
                 fi
@@ -113,10 +139,14 @@ if [ -d ".git" ]; then
     echo ""
 fi
 
+if [ "${BLAB_SKIP_PYTHON_SETUP:-}" = "1" ]; then
+    echo "Skipping Python setup (BLAB_SKIP_PYTHON_SETUP=1)."
+    exit 0
+fi
+
 # Locate Python 3.11+
 PYTHON_CMD=""
-for cand in python3.13 python3.12 python3.11 python3 /opt/homebrew/bin/python3 python; do
-
+for cand in python3.13 python3.12 python3.11 python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3.12 /usr/local/bin/python3.12 python; do
     if command -v "$cand" >/dev/null 2>&1; then
         if "$cand" -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" 2>/dev/null; then
             PYTHON_CMD="$cand"
@@ -130,7 +160,13 @@ if [ -z "$PYTHON_CMD" ]; then
     if command -v brew >/dev/null 2>&1; then
         if ask_yn "Install Python 3.12 with Homebrew" "Y"; then
             brew install python@3.12
-            PYTHON_CMD="/opt/homebrew/bin/python3.12"
+            if [ -x "/opt/homebrew/bin/python3.12" ]; then
+                PYTHON_CMD="/opt/homebrew/bin/python3.12"
+            elif [ -x "/usr/local/bin/python3.12" ]; then
+                PYTHON_CMD="/usr/local/bin/python3.12"
+            elif command -v python3.12 >/dev/null 2>&1; then
+                PYTHON_CMD="$(command -v python3.12)"
+            fi
         fi
     fi
 fi
@@ -161,6 +197,11 @@ else
     "$PYTHON_CMD" -m venv "$VENV_DIR"
 fi
 
+if ! "$VENV_PY" -c "import pip" 2>/dev/null; then
+    echo "Bootstrapping pip in virtual environment..."
+    "$VENV_PY" -m ensurepip --upgrade 2>/dev/null || true
+fi
+
 echo ""
 echo "Updating pip and installing / repairing Boundary Lab..."
 "$VENV_PY" -m pip install --upgrade pip
@@ -188,14 +229,17 @@ if ask_yn "Install or update the optional Julia-based BEAT Engine solvers" "N"; 
         JULIA_CMD="julia"
     elif [ -x "$HOME/.juliaup/bin/julia" ]; then
         JULIA_CMD="$HOME/.juliaup/bin/julia"
-    elif [ -x "/Applications/Julia-1.12.app/Contents/Resources/julia/bin/julia" ]; then
-        JULIA_CMD="/Applications/Julia-1.12.app/Contents/Resources/julia/bin/julia"
-    elif [ -x "/Applications/Julia-1.11.app/Contents/Resources/julia/bin/julia" ]; then
-        JULIA_CMD="/Applications/Julia-1.11.app/Contents/Resources/julia/bin/julia"
-    elif [ -x "/Applications/Julia-1.10.app/Contents/Resources/julia/bin/julia" ]; then
-        JULIA_CMD="/Applications/Julia-1.10.app/Contents/Resources/julia/bin/julia"
     elif [ -x "/opt/homebrew/bin/julia" ]; then
         JULIA_CMD="/opt/homebrew/bin/julia"
+    elif [ -x "/usr/local/bin/julia" ]; then
+        JULIA_CMD="/usr/local/bin/julia"
+    else
+        for app in $(ls -d /Applications/Julia-*.app 2>/dev/null | sort -V -r); do
+            if [ -x "$app/Contents/Resources/julia/bin/julia" ]; then
+                JULIA_CMD="$app/Contents/Resources/julia/bin/julia"
+                break
+            fi
+        done
     fi
 
     if [ -z "$JULIA_CMD" ]; then
@@ -203,7 +247,13 @@ if ask_yn "Install or update the optional Julia-based BEAT Engine solvers" "N"; 
         if command -v brew >/dev/null 2>&1; then
             if ask_yn "Install Julia using Homebrew" "Y"; then
                 brew install --cask julia
-                JULIA_CMD="julia"
+                if command -v julia >/dev/null 2>&1; then
+                    JULIA_CMD="julia"
+                elif [ -x "/opt/homebrew/bin/julia" ]; then
+                    JULIA_CMD="/opt/homebrew/bin/julia"
+                elif [ -x "/usr/local/bin/julia" ]; then
+                    JULIA_CMD="/usr/local/bin/julia"
+                fi
             fi
         fi
     fi

@@ -246,8 +246,9 @@ class BoundaryLabSplashScreen(QSplashScreen):
 
 
 def _startup_log_path() -> Path:
-    root = os.environ.get("LOCALAPPDATA")
-    if root:
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Logs" / "Boundary Lab"
+    elif root := os.environ.get("LOCALAPPDATA"):
         base = Path(root) / "Boundary Lab" / "logs"
     else:
         base = Path.home() / ".boundary-lab" / "logs"

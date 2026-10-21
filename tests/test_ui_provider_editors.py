@@ -1,3 +1,4 @@
+import sys
 from dataclasses import replace
 from pathlib import Path
 from time import monotonic, sleep
@@ -165,7 +166,8 @@ def test_plugin_manager_requires_available_default_and_cancel_preserves_catalog(
     from blab.ui.provider_preferences import ProviderPackagesDialog
 
     dialog = ProviderPackagesDialog(("example.box",), default_provider="example.box")
-    assert dialog.table.item(0, 3).text() == "Built-in"
+    expected_ath_status = "Setup required" if sys.platform == "darwin" else "Built-in"
+    assert dialog.table.item(0, 3).text() == expected_ath_status
     assert not dialog.table.cellWidget(0, 0).isEnabled()
     dialog.table.cellWidget(1, 0).setChecked(False)
     assert not dialog.buttons.button(QDialogButtonBox.StandardButton.Ok).isEnabled()

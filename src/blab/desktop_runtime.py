@@ -187,6 +187,32 @@ def check_metal(root: Path) -> bool:
     log = Path.home() / "Library/Logs/Boundary Lab/metal-check.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(detail, encoding="utf-8")
+    message = (
+        "Apple Metal is ready. Select BEAT Engine (Apple Metal) in Preferences."
+        if success
+        else "Apple Metal is unavailable. CPU solving is still available.\n"
+        "Ensure macOS 14+ on Apple Silicon is used and Metal runtime is installed."
+    )
+    if sys.platform == "darwin":
+        try:
+            alert_type = "informational" if success else "warning"
+            subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    "on run {t, m}",
+                    "-e",
+                    f"display alert t message m as {alert_type}",
+                    "-e",
+                    "end run",
+                    "Boundary Lab Metal Check",
+                    message + f"\n\nDetails: {log}",
+                ],
+                check=False,
+                timeout=10,
+            )
+        except Exception:
+            pass
     return success
 
 

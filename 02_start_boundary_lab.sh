@@ -1,6 +1,22 @@
 #!/bin/bash
 set -e
 
+for extra_path in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/.juliaup/bin"; do
+    if [ -d "$extra_path" ] && [[ ":$PATH:" != *":$extra_path:"* ]]; then
+        PATH="$extra_path:$PATH"
+    fi
+done
+export PATH
+
+if [ -z "${BLAB_JULIA_EXE:-}" ] && ! command -v julia >/dev/null 2>&1; then
+    for app in $(ls -d /Applications/Julia-*.app 2>/dev/null | sort -V -r); do
+        if [ -x "$app/Contents/Resources/julia/bin/julia" ]; then
+            export BLAB_JULIA_EXE="$app/Contents/Resources/julia/bin/julia"
+            break
+        fi
+    done
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 PROJECT_DIR=""
 
