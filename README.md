@@ -31,10 +31,31 @@ If modeling in Autodesk Fusion, the [Fusion2Msh](https://github.com/JWSound/fusi
    instructed so Windows can refresh the available commands.
 4. Double-click `02_start_boundary_lab.bat` to launch Boundary Lab.
 
+## macOS quick start
+
+1. Clone or download Boundary Lab, then double-click `01_install_update_boundary-lab.command` (or run `./01_install_update_boundary-lab.sh` in Terminal).
+2. Follow the guided prompts. The installer sets up Python 3.11+, creates `.venv`, installs Boundary Lab and its GUI dependencies, and can optionally prepare Julia CPU and Apple Silicon Metal GPU solvers.
+3. Double-click `02_start_boundary_lab.command` (or run `./02_start_boundary_lab.sh`) to launch Boundary Lab.
+4. Alternatively, use the standalone `Boundary Lab.app` installer candidate built with `scripts/build_macos_runtime.py` and `scripts/build_macos_installer.py` (see [macOS installer guide](docs/macos-installer.md)).
+
 
 ## Solver Requirements
 
 Boundary Lab uses BEAT Engine for numerical solving of exterior, interior, or coupled systems. BEAT Engine is an open-source acoustic solver platform written in Julia that is downloaded automatically as a pinned package as part of Boundary Lab. See [BEAT dependency setup](docs/advanced/BEAT%20Local%20Dependency.md) for updates and contributor overrides.
+
+### BEAT Engine Apple Metal GPU Solver Requirements (macOS Apple Silicon)
+
+* Apple Silicon Mac (M1/M2/M3/M4 or newer) running macOS 14+
+* [Julia](https://julialang.org/downloads/manual-downloads/) installed and available on `PATH`
+* GPU acceleration on macOS uses Apple Metal via `Metal.jl`
+
+To prepare the Julia Metal environment, from the repository root run:
+
+```bash
+python -m beat_engine instantiate --backend metal
+```
+
+Availability is verified automatically when selected in **Preferences -> BEM Solver -> BEAT Engine (Apple Metal)**.
 
 ### BEAT Engine CUDA GPU Solver Requirements
 

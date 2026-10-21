@@ -7,6 +7,7 @@ subprocess client. All application adapters share the same worker pool below.
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -25,17 +26,20 @@ DEFAULT_BEAT_ENGINE_SYSTEM_SOLVER_SCRIPT = engine_paths().system_solver
 DEFAULT_BEAT_ENGINE_CPU_PROJECT = engine_paths("cpu").project
 DEFAULT_BEAT_ENGINE_CUDA_PROJECT = engine_paths("cuda").project
 DEFAULT_BEAT_ENGINE_ROCM_PROJECT = engine_paths("rocm").project
+DEFAULT_BEAT_ENGINE_METAL_PROJECT = engine_paths("metal").project
 DEFAULT_BEAT_ENGINE_PROJECT = DEFAULT_BEAT_ENGINE_CPU_PROJECT
 BEAT_ENGINE_CUDA_BACKEND = "cuda"
 BEAT_ENGINE_CPU_BACKEND = "cpu"
 BEAT_ENGINE_ROCM_BACKEND = "rocm"
+BEAT_ENGINE_METAL_BACKEND = "metal"
 # A fresh Metal compiler cache can exceed the engine's five-minute startup budget.
 METAL_STARTUP_TIMEOUT_S = 900.0
 BEAT_ENGINE_BACKENDS = frozenset(info.backend_id for info in backend_catalog())
 
 
 def normalize_beat_engine_backend(value: object) -> str:
-    text = str(value or BEAT_ENGINE_CUDA_BACKEND).strip().lower()
+    default_backend = BEAT_ENGINE_CPU_BACKEND if sys.platform == "darwin" else BEAT_ENGINE_CUDA_BACKEND
+    text = str(value or default_backend).strip().lower()
     aliases = {
         "beat_cuda": BEAT_ENGINE_CUDA_BACKEND,
         "cuda": BEAT_ENGINE_CUDA_BACKEND,
@@ -48,6 +52,9 @@ def normalize_beat_engine_backend(value: object) -> str:
         "rocm": BEAT_ENGINE_ROCM_BACKEND,
         "amd": BEAT_ENGINE_ROCM_BACKEND,
         "amdgpu": BEAT_ENGINE_ROCM_BACKEND,
+        "beat_metal": BEAT_ENGINE_METAL_BACKEND,
+        "metal": BEAT_ENGINE_METAL_BACKEND,
+        "apple_metal": BEAT_ENGINE_METAL_BACKEND,
     }
     aliases.update({f"beat_{info.backend_id}": info.backend_id for info in backend_catalog()})
     backend = aliases.get(text, text)

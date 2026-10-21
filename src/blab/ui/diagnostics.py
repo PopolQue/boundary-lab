@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import os
 import platform
 import sys
 from collections.abc import Callable, Mapping
@@ -142,6 +143,24 @@ def _dependency_versions() -> dict[str, str]:
 
 
 def _system_ram_text() -> str:
+    if sys.platform == "darwin":
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            phys_pages = os.sysconf("SC_PHYS_PAGES")
+            if page_size > 0 and phys_pages > 0:
+                bytes_ram = page_size * phys_pages
+                return f"{bytes_ram / (1024**3):.1f} GiB"
+        except (ValueError, OSError, AttributeError):
+            pass
+        try:
+            import subprocess
+
+            out = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip()
+            return f"{int(out) / (1024**3):.1f} GiB"
+        except Exception:
+            return "unknown"
+
+
     if sys.platform != "win32":
         return "unknown"
 

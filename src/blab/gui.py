@@ -256,14 +256,35 @@ def _startup_log_path() -> Path:
 
 
 def _show_native_error_box(title: str, message: str) -> None:
-    if sys.platform != "win32":
-        return
-    try:
-        import ctypes
+    if sys.platform == "win32":
+        try:
+            import ctypes
 
-        ctypes.windll.user32.MessageBoxW(None, message, title, 0x10)
-    except Exception:
-        pass
+            ctypes.windll.user32.MessageBoxW(None, message, title, 0x10)
+        except Exception:
+            pass
+    elif sys.platform == "darwin":
+        try:
+            import subprocess
+
+            subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    "on run {t, m}",
+                    "-e",
+                    "display alert t message m as critical",
+                    "-e",
+                    "end run",
+                    str(title),
+                    str(message),
+                ],
+                check=False,
+                timeout=5,
+            )
+        except Exception:
+            pass
+
 
 
 def _set_windows_app_user_model_id() -> None:

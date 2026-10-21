@@ -1,13 +1,14 @@
 # Installation and Setup
 
-This guide covers installing, updating, and preparing Boundary Lab on Windows
-and Linux. Only the Python application and GUI are required to design systems,
+This guide covers installing, updating, and preparing Boundary Lab on Windows,
+macOS, and Linux. Only the Python application and GUI are required to design systems,
 import meshes, and inspect projects. Geometry generation through Ath and each
 solver backend have their own runtime requirements described below.
 
 Boundary Lab requires Python 3.11 or newer.
 
-The guided Windows scripts target 64-bit Windows 10 and 11. The Linux commands
+The guided Windows scripts target 64-bit Windows 10 and 11. The guided macOS
+scripts target macOS 14+ on Apple Silicon (ARM64) or Intel. The Linux commands
 below target an x86-64 Debian or Ubuntu desktop, including Ubuntu under WSL2.
 The Python application and BEAT Engine CPU backend may work on other Linux
 architectures, but the bundled Windows Ath executable requires an
@@ -80,6 +81,43 @@ used without activation:
 
 Ath runs natively on Windows, and Boundary Lab meshes its geometry through the
 cross-platform Python Gmsh library. Wine is not required.
+
+## macOS
+
+### Guided installation
+
+Download and extract the latest stable source archive or clone the repository:
+
+1. Double-click `01_install_update_boundary-lab.command` (or run `./01_install_update_boundary-lab.sh` in Terminal).
+2. Allow the script to install Python or Julia via Homebrew if needed.
+3. Choose whether to prepare the optional Julia-based BEAT Engine CPU and Apple Metal GPU solvers.
+4. Double-click `02_start_boundary_lab.command` (or run `./02_start_boundary_lab.sh`) to launch the application.
+
+The installer creates `.venv`, installs or repairs Boundary Lab and its GUI
+dependencies, and validates the `blab` command. When run from an existing Git
+checkout, it can optionally select the latest published stable release tag.
+
+For prebuilt distribution bundles, see the [macOS Apple Silicon candidate](macos-installer.md)
+which produces a drag-to-Applications DMG with bundled Python, Julia, and Metal support.
+
+### Manual macOS installation
+
+Ensure Python 3.11+ and Git are installed (e.g. via Homebrew: `brew install python@3.12 git`).
+From the repository root in Terminal, run:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[gui]"
+blab gui
+```
+
+### Ath geometry generation on macOS
+
+Ath is a Windows executable and is not bundled with the macOS distribution.
+Boundary Lab supports external Ath generation through Wine. See [Optional Ath generation on macOS](macos-ath-setup.md)
+for instructions on configuring Ath and Wine via **Edit → Ath Setup…**.
 
 ## Linux
 
@@ -159,12 +197,13 @@ process, and no intermediate raw mesh is written or reloaded.
 
 ## Solver setup
 
-Boundary Lab offers three local BEAT Engine backends. All support exterior
+Boundary Lab offers four local BEAT Engine backends. All support exterior
 BEM and coupled FEM-BEM systems, including X and XY symmetry.
 
 | Backend | Hardware/runtime | Exterior BEM | Coupled FEM-BEM |
 |---|---|:---:|:---:|
 | BEAT Engine CPU | Julia and CPU BLAS/LAPACK | Yes | Yes |
+| BEAT Engine Apple Metal | Julia, Metal.jl, and Apple Silicon GPU (macOS) | Yes | Yes |
 | BEAT Engine Nvidia CUDA | Julia and supported NVIDIA GPU | Yes | Yes |
 | BEAT Engine AMD ROCm | Julia, AMDGPU.jl, and a functional ROCm SDK | Yes | Yes |
 
@@ -173,6 +212,21 @@ for either migrate to BEAT CPU. The ROCm path uses GPU-resident regular and Duff
 assembly, rocBLAS/rocSOLVER dense solves, and GPU exterior field evaluation.
 See [BEAT Engine AMD ROCm](advanced/beat-engine-rocm.md) for setup and
 validation details.
+
+### BEAT Engine Apple Metal on macOS
+
+On Apple Silicon (M1/M2/M3/M4 or newer), Boundary Lab supports GPU acceleration
+using Apple Metal:
+
+```bash
+python -m beat_engine instantiate --backend metal
+python -m beat_engine doctor --backend metal --threads 2
+```
+
+In Boundary Lab Preferences, select **BEAT Engine (Apple Metal)**. Metal availability
+is checked asynchronously in the background. GPU assembly uses Float32; Float64
+workloads remain available via the CPU backend. Exterior electrodynamic-transducer
+requests require CPU solving.
 
 ### BEAT Engine AMD ROCm on Windows
 

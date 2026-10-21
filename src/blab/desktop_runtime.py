@@ -133,7 +133,12 @@ def check_cuda(root: Path) -> bool:
         success = result.returncode == 0
     except (OSError, subprocess.TimeoutExpired) as exc:
         success, detail = False, str(exc)
-    log = Path(os.environ["LOCALAPPDATA"]) / "Boundary Lab/logs/cuda-check.log"
+    log = (
+        Path.home() / "Library/Logs/Boundary Lab/cuda-check.log"
+        if sys.platform == "darwin"
+        else Path(os.environ.get("LOCALAPPDATA", "")) / "Boundary Lab/logs/cuda-check.log"
+    )
+    log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(detail, encoding="utf-8")
     message = (
         "NVIDIA CUDA is ready. Select BEAT Engine CUDA in Preferences."
@@ -141,9 +146,47 @@ def check_cuda(root: Path) -> bool:
         else "NVIDIA CUDA is unavailable. CPU solving is still available. Install a compatible NVIDIA driver "
         "from nvidia.com, then run this check again."
     )
-    ctypes.windll.user32.MessageBoxW(
-        None, message + f"\n\nDetails: {log}", "Boundary Lab CUDA check", 0x40 if success else 0x30
-    )
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.user32.MessageBoxW(
+                None, message + f"\n\nDetails: {log}", "Boundary Lab CUDA check", 0x40 if success else 0x30
+            )
+        except Exception:
+            pass
+    return success
+
+
+def check_metal(root: Path) -> bool:
+    """Check Metal GPU solving capability."""
+    script = 'using Metal; Metal.functional() || error("Metal unavailable"); Metal.versioninfo()'
+    metal_proj = root / "runtime/python/lib/python3.13/site-packages/beat_engine/julia_metal"
+    if not metal_proj.is_dir():
+        matches = list((root / "runtime/python/lib").glob("python3.*/site-packages/beat_engine/julia_metal"))
+        if matches:
+            metal_proj = matches[0]
+    command = [
+        os.environ.get("BLAB_JULIA_EXE", "julia"),
+        "--startup-file=no",
+        f"--project={metal_proj}",
+        "-e",
+        script,
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=900,
+        )
+        detail = result.stdout + result.stderr
+        success = result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        success, detail = False, str(exc)
+    log = Path.home() / "Library/Logs/Boundary Lab/metal-check.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(detail, encoding="utf-8")
     return success
 
 
@@ -157,6 +200,10 @@ def _main() -> None:
         if "cuda" not in manifest["backends"]:
             raise RuntimeError("This is the CPU package. Install the CPU + CUDA package to use NVIDIA acceleration.")
         raise SystemExit(0 if check_cuda(root) else 1)
+    if args == ["--check-metal"]:
+        if "metal" not in manifest["backends"]:
+            raise RuntimeError("This package does not include Metal acceleration.")
+        raise SystemExit(0 if check_metal(root) else 1)
     if args and args[0] == "--cli":
         from blab.cli import main as cli_main
 
@@ -171,7 +218,10 @@ def main() -> None:
     log = None
     try:
         if sys.stderr is None:
-            path = Path(os.environ["LOCALAPPDATA"]) / "Boundary Lab/logs/launcher.log"
+            if sys.platform == "darwin":
+                path = Path.home() / "Library/Logs/Boundary Lab/launcher.log"
+            else:
+                path = Path(os.environ.get("LOCALAPPDATA", "")) / "Boundary Lab/logs/launcher.log"
             path.parent.mkdir(parents=True, exist_ok=True)
             log = path.open("a", encoding="utf-8", buffering=1)
             sys.stdout = sys.stderr = log
@@ -179,10 +229,34 @@ def main() -> None:
     except Exception:
         traceback.print_exc()
         if log is not None:
-            ctypes.windll.user32.MessageBoxW(
-                None, f"Boundary Lab could not start.\n\nDetails: {log.name}", "Boundary Lab", 0x10
-            )
+            if sys.platform == "darwin":
+                try:
+                    subprocess.run(
+                        [
+                            "osascript",
+                            "-e",
+                            "on run {t, m}",
+                            "-e",
+                            "display alert t message m as critical",
+                            "-e",
+                            "end run",
+                            "Boundary Lab",
+                            f"Boundary Lab could not start.\n\nDetails: {log.name}",
+                        ],
+                        check=False,
+                        timeout=5,
+                    )
+                except Exception:
+                    pass
+            elif sys.platform == "win32":
+                try:
+                    ctypes.windll.user32.MessageBoxW(
+                        None, f"Boundary Lab could not start.\n\nDetails: {log.name}", "Boundary Lab", 0x10
+                    )
+                except Exception:
+                    pass
         raise SystemExit(1) from None
+
     finally:
         if log is not None:
             sys.stdout = sys.stderr = None
