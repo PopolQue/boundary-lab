@@ -246,13 +246,20 @@ if ask_yn "Install or update the optional Julia-based BEAT Engine solvers" "N"; 
         echo "Julia was not found."
         if command -v brew >/dev/null 2>&1; then
             if ask_yn "Install Julia using Homebrew" "Y"; then
-                brew install --cask julia
+                if brew install juliaup 2>/dev/null; then
+                    juliaup add 1.12.6 2>/dev/null || true
+                    juliaup default 1.12.6 2>/dev/null || true
+                else
+                    brew install --cask julia-app 2>/dev/null || brew install --cask julia 2>/dev/null || true
+                fi
                 if command -v julia >/dev/null 2>&1; then
                     JULIA_CMD="julia"
                 elif [ -x "/opt/homebrew/bin/julia" ]; then
                     JULIA_CMD="/opt/homebrew/bin/julia"
                 elif [ -x "/usr/local/bin/julia" ]; then
                     JULIA_CMD="/usr/local/bin/julia"
+                elif [ -x "$HOME/.juliaup/bin/julia" ]; then
+                    JULIA_CMD="$HOME/.juliaup/bin/julia"
                 fi
             fi
         fi
