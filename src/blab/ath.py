@@ -195,6 +195,11 @@ class AthProcessRunner:
         if not ath_exe.exists():
             raise FileNotFoundError(f"Ath executable not found: {ath_exe}")
 
+        if not config_text.strip():
+            raise ValueError(
+                "Ath configuration is empty. Enter an Ath waveguide definition (including 'Length = ...') before generating."
+            )
+
         mirror_axes = ath_mirror_axes_from_config_text(config_text)
         run_root.mkdir(parents=True, exist_ok=True)
         run_root = run_root.resolve()
