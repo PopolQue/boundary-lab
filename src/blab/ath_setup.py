@@ -15,10 +15,32 @@ class AthSetupError(ValueError):
 
 
 def discover_wine() -> str:
-    candidates = [shutil.which("wine"), "/opt/homebrew/bin/wine", "/usr/local/bin/wine"]
+    candidates = [
+        shutil.which("wine"),
+        shutil.which("wine64"),
+        "/opt/homebrew/bin/wine",
+        "/opt/homebrew/bin/wine64",
+        "/usr/local/bin/wine",
+        "/usr/local/bin/wine64",
+    ]
+    app_names = (
+        "Wine Crossover.app",
+        "Wine Stable.app",
+        "Wine Devel.app",
+        "Wine Staging.app",
+        "CrossOver.app",
+    )
     for root in (Path("/Applications"), Path.home() / "Applications"):
-        for name in ("Wine Stable.app", "Wine Devel.app", "Wine Staging.app"):
-            candidates.append(str(root / name / "Contents/Resources/wine/bin/wine"))
+        for name in app_names:
+            candidates.extend(
+                [
+                    str(root / name / "Contents/Resources/wine/bin/wine"),
+                    str(root / name / "Contents/Resources/wine/bin/wine64"),
+                    str(root / name / "Contents/SharedSupport/CrossOver/bin/wine"),
+                ]
+            )
+    whisky_wine = Path.home() / "Library/Application Support/com.isaacmarovitz.Whisky/Libraries/Wine/bin/wine"
+    candidates.append(str(whisky_wine))
     return next((p for p in candidates if p and Path(p).is_file() and os.access(p, os.X_OK)), "")
 
 

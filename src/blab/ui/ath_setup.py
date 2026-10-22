@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -45,8 +46,8 @@ class AthSetupDialog(QDialog):
         self.wine = QLineEdit(str(settings.value(WINE_PATH_KEY, "")))
         self._controls = [self.ath, self.wine]
         for label, field, file_filter in (
-            ("Ath executable", self.ath, "Ath executable (*.exe)"),
-            ("Wine executable", self.wine, "All files (*)"),
+            ("Ath executable (.exe)", self.ath, "Ath executable (*.exe)"),
+            ("Wine binary (macOS)", self.wine, "All files (*)"),
         ):
             row = QWidget()
             horizontal = QHBoxLayout(row)
@@ -59,7 +60,9 @@ class AthSetupDialog(QDialog):
             form.addRow(label, row)
         layout.addLayout(form)
         hint = QLabel(
-            "Choose the Wine executable inside its app bundle, usually Contents/Resources/wine/bin/wine. You can also paste its full path."
+            "Wine is a native macOS program, not a .exe file. Click 'Find Wine' to detect it automatically, "
+            "or enter the path to the Unix binary (e.g. /opt/homebrew/bin/wine, or inside "
+            "Wine Stable.app at Contents/Resources/wine/bin/wine)."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -104,8 +107,20 @@ class AthSetupDialog(QDialog):
         path = discover_wine()
         if path:
             self.wine.setText(path)
+            self.status.setText(f"Found Wine: {path}")
         else:
-            self.status.setText("Wine was not found. Install it separately, then browse or paste its executable path.")
+            self.status.setText("Wine was not found. Install it via Homebrew or from Gcenx's macOS builds.")
+            QMessageBox.information(
+                self,
+                "Wine Not Found",
+                "Wine was not found in standard macOS locations.\n\n"
+                "To install Wine on modern macOS, run in Terminal:\n"
+                "  brew tap gcenx/wine\n"
+                "  brew install --cask --no-quarantine wine-crossover\n\n"
+                "Or download 'Wine Crossover' from:\n"
+                "  https://github.com/Gcenx/macOS_Wine_builds/releases\n\n"
+                "If Wine is installed in a custom location, click 'Browse…' to select it.",
+            )
 
     def accept(self):
         if self._stage:
