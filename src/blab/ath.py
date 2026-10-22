@@ -200,10 +200,37 @@ class AthProcessRunner:
         run_root = run_root.resolve()
         output_dir = run_root / case_name
         output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / case_name).mkdir(parents=True, exist_ok=True)
         config_path = output_dir / f"{case_name}.cfg"
         geo_path = output_dir / f"{case_name}.geo"
         log_path = output_dir / "ath.log"
         config_path.write_text(config_text, encoding="utf-8")
+
+        # Ensure ath.cfg exists in output_dir and does not point to invalid drives under Wine.
+        ath_cfg_path = output_dir / "ath.cfg"
+        if not ath_cfg_path.exists():
+            existing_cfg = ath_exe.parent / "ath.cfg"
+            if existing_cfg.is_file():
+                lines = []
+                for line in existing_cfg.read_text(encoding="utf-8", errors="replace").splitlines():
+                    lower = line.strip().lower()
+                    if lower.startswith("outputrootdir"):
+                        lines.append('OutputRootDir = "."')
+                    elif lower.startswith("meshcmd"):
+                        lines.append('MeshCmd = ""')
+                    elif lower.startswith("gnuplotpath"):
+                        lines.append('GnuplotPath = ""')
+                    else:
+                        lines.append(line)
+                if not any(line.strip().lower().startswith("outputrootdir") for line in lines):
+                    lines.append('OutputRootDir = "."')
+                if not any(line.strip().lower().startswith("meshcmd") for line in lines):
+                    lines.append('MeshCmd = ""')
+                if not any(line.strip().lower().startswith("gnuplotpath") for line in lines):
+                    lines.append('GnuplotPath = ""')
+                ath_cfg_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            else:
+                ath_cfg_path.write_text('OutputRootDir = "."\nMeshCmd = ""\nGnuplotPath = ""\n', encoding="utf-8")
 
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         if os.name == "nt":
@@ -237,10 +264,34 @@ class AthProcessRunner:
         if self._cancel_requested:
             raise AthCancelledError("Ath generation cancelled")
 
-        # Preserve Ath diagnostics even when generation fails.  Some geometry
+        # Preserve Ath diagnostics even when generation fails. Some geometry
         # errors are only explained on stderr in blab mode.
         log_path.write_text(stderr, encoding="utf-8", newline="")
-        if stdout:
+
+        # Depending on the Ath version, GEO output is either streamed to stdout
+        # or written to bem_mesh.geo inside the case directory.
+        geo_content = ""
+        if "Point(" in stdout or "Point (" in stdout:
+            geo_content = stdout
+        else:
+            candidates = [
+                output_dir / case_name / "bem_mesh.geo",
+                output_dir / "bem_mesh.geo",
+                output_dir / case_name / f"{case_name}.geo",
+            ]
+            for candidate in candidates:
+                if candidate.is_file():
+                    try:
+                        text = candidate.read_text(encoding="utf-8", errors="replace")
+                        if "Point(" in text or "Point (" in text:
+                            geo_content = text
+                            break
+                    except OSError:
+                        pass
+
+        if geo_content:
+            geo_path.write_text(geo_content, encoding="utf-8", newline="")
+        elif stdout:
             geo_path.write_text(stdout, encoding="utf-8", newline="")
 
         returncode = 0 if process is None else process.returncode
@@ -248,7 +299,7 @@ class AthProcessRunner:
             message = stderr.strip() or stdout.strip()
             raise RuntimeError(f"Ath failed with exit code {returncode}: {message}")
 
-        if not stdout.strip():
+        if not geo_content.strip() and not stdout.strip():
             raise RuntimeError("Ath blab mode produced no Gmsh GEO output.")
 
         if status_callback is not None:

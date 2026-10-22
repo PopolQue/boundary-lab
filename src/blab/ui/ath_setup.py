@@ -162,8 +162,35 @@ class AthSetupDialog(QDialog):
             return
         self._temporary = TemporaryDirectory(prefix="boundary-ath-check-")
         root = Path(self._temporary.name)
+        (root / "check").mkdir(parents=True, exist_ok=True)
         self._config = root / "check.cfg"
         self._config.write_text(TEST_CONFIG, encoding="utf-8")
+
+        # Ensure ath.cfg exists in root, sets OutputRootDir = ".", and suppresses missing Windows tools.
+        ath_cfg_path = root / "ath.cfg"
+        existing_cfg = self._ath_path.parent / "ath.cfg"
+        if existing_cfg.is_file():
+            lines = []
+            for line in existing_cfg.read_text(encoding="utf-8", errors="replace").splitlines():
+                lower = line.strip().lower()
+                if lower.startswith("outputrootdir"):
+                    lines.append('OutputRootDir = "."')
+                elif lower.startswith("meshcmd"):
+                    lines.append('MeshCmd = ""')
+                elif lower.startswith("gnuplotpath"):
+                    lines.append('GnuplotPath = ""')
+                else:
+                    lines.append(line)
+            if not any(line.strip().lower().startswith("outputrootdir") for line in lines):
+                lines.append('OutputRootDir = "."')
+            if not any(line.strip().lower().startswith("meshcmd") for line in lines):
+                lines.append('MeshCmd = ""')
+            if not any(line.strip().lower().startswith("gnuplotpath") for line in lines):
+                lines.append('GnuplotPath = ""')
+            ath_cfg_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        else:
+            ath_cfg_path.write_text('OutputRootDir = "."\nMeshCmd = ""\nGnuplotPath = ""\n', encoding="utf-8")
+
         environment = QProcessEnvironment.systemEnvironment()
         prefix = wine_prefix()
         prefix.parent.mkdir(parents=True, exist_ok=True)
@@ -206,7 +233,19 @@ class AthSetupDialog(QDialog):
             self._start("geometry", [str(self._ath_path), str(self._config), "-b"])
         else:
             output = self._output.decode(errors="replace")
-            if "Point(" in output or "Point (" in output:
+            geo_found = "Point(" in output or "Point (" in output
+            if not geo_found and self._temporary:
+                temp_root = Path(self._temporary.name)
+                for geo_file in temp_root.rglob("*.geo"):
+                    try:
+                        text = geo_file.read_text(encoding="utf-8", errors="replace")
+                        if "Point(" in text or "Point (" in text:
+                            geo_found = True
+                            break
+                    except OSError:
+                        pass
+
+            if geo_found:
                 self._done(
                     f"Configuration test passed ({self._version}). Ath produced geometry. Click Save to use these paths."
                 )
