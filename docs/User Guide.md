@@ -470,11 +470,18 @@ Observation-plane properties control the plane geometry, sampling resolution,
 result response, frequency, and viewport display metric. Real, imaginary, and
 animated instantaneous pressure use a diverging color map centered on zero.
 
+The properties dialog shows only controls relevant to the selected display.
+SPL supports automatic scaling or manual minimum/maximum values; Normalized SPL
+lets you set the displayed range below 0 dB. **Animate Cycle** is available for
+Real Pressure, Imaginary Pressure, Particle Velocity Magnitude, and Flow Arrows.
+SPL, Normalized SPL, and Phase can sweep frequency but do not animate a cycle.
+
 Interior planes can also display **Particle Velocity Magnitude**. Boundary Lab
 derives the complex particle-velocity vector from the P1 FEM pressure gradient
 using the bounded region density, then colors the plane by its magnitude in
-metres per second on a fixed 0 to 35 m/s color scale. Phase animation shows
-instantaneous particle speed using the same fixed scale. The
+metres per second with an automatic color maximum or a user-specified limit.
+**Animate Cycle** shows physical instantaneous particle speed from the retained
+RMS phasors, using a color range that stays fixed throughout the cycle. The
 option is unavailable for Exterior and Combined planes because their exterior
 BEM field evaluator currently returns pressure only.
 
@@ -488,8 +495,20 @@ automatic scale. The selected manual limit is stored with the observation
 plane in the project file.
 
 With a plane selected in the viewport, use **W** for Move, **E** for Rotate,
-and **R** for Scale. The manual pressure color limit accepts whole pascal
-values and starts at 10 Pa.
+and **R** for Scale. Drag the axis arrows to translate the plane or the square
+corner grips to resize it. Controls keep a consistent screen size when zooming.
+
+In Rotate mode, drag a red, green, or blue ring to rotate about the plane's
+local X, Y, or Z axis. A radar appears with 45-degree ticks on its inner band,
+10-degree ticks on its middle band, and 5-degree ticks on its outer band.
+Moving within 10 screen pixels of a tick snaps to that relative angle; away
+from the ticks, rotation is continuous. Alt is no longer needed for free
+rotation. The current angle and the top-right hotkey help remain visible.
+Nearly edge-on axes use a face-on radar to keep the ticks accessible.
+Release to finish a change, or press **Escape** during a drag to restore the
+plane's starting geometry.
+
+The manual pressure color limit accepts whole pascal values and starts at 10 Pa.
 
 ## Frequency Controls
 
