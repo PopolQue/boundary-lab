@@ -26,12 +26,16 @@ def provider_roots() -> tuple[Path, ...]:
 
 def bundled_provider_ids() -> tuple[str, ...]:
     """Explicit first-party allowlist, never a trust claim from a manifest."""
-    path = APP_ROOT / "geometry_providers" / "vented_enclosure" / "provider.json"
-    try:
-        manifest = ProviderManifest.read(path)
-    except (OSError, ValueError):
-        return ()
-    return (manifest.id,) if manifest.id == "blab.vented_enclosure" else ()
+    ids: list[str] = []
+    for sub in ("vented_enclosure", "waveguide"):
+        path = APP_ROOT / "geometry_providers" / sub / "provider.json"
+        try:
+            manifest = ProviderManifest.read(path)
+            if manifest.id in ("blab.vented_enclosure", "blab.waveguide"):
+                ids.append(manifest.id)
+        except (OSError, ValueError):
+            pass
+    return tuple(ids)
 
 
 @dataclass(frozen=True)

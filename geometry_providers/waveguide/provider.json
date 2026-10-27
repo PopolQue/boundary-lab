@@ -1,0 +1,23 @@
+{
+  "manifest_version": 1,
+  "id": "blab.waveguide",
+  "name": "Parametric Waveguide",
+  "version": "0.1.0",
+  "provider_api": 1,
+  "source_schema_version": 1,
+  "backend": "waveguide.backend:create_backend",
+  "editor": "waveguide.editor:create_editor",
+  "default_source": {
+    "throat_diameter_m": 0.0254,
+    "throat_angle_deg": 7.0,
+    "length_m": 0.12,
+    "coverage_h_deg": 90.0,
+    "coverage_v_deg": 60.0,
+    "rolloff_radius_m": 0.03,
+    "baffle_width_m": 0.32,
+    "baffle_height_m": 0.26,
+    "mesh_size_throat_m": 0.005,
+    "mesh_size_mouth_m": 0.015
+  },
+  "mesh_scale_factor": 1.0
+}
